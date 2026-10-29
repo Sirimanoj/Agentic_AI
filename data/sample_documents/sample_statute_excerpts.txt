@@ -1,0 +1,16 @@
+UNIFORM COMMERCIAL CODE (UCC) & CONTRACT LAW STATUTORY EXCERPTS
+
+§ 2-201. FORMAL REQUIREMENTS; STATUTE OF FRAUDS.
+(1) Except as otherwise provided in this section a contract for the sale of goods for the price of $500 or more is not enforceable by way of action or defense unless there is some writing sufficient to indicate that a contract for sale has been made between the parties and signed by the party against whom enforcement is sought or by his authorized agent or broker. A writing is not insufficient because it omits or incorrectly states a term agreed upon but the contract is not enforceable under this paragraph beyond the quantity of goods shown in such writing.
+(2) Between merchants if within a reasonable time a writing in confirmation of the contract and sufficient against the sender is received and the party receiving it has reason to know its contents, it satisfies the requirements of subsection (1) against such party unless written notice of objection to its contents is given within 10 days after it is received.
+
+§ 2-718. LIQUIDATION OR LIMITATION OF DAMAGES; DEPOSITS.
+(1) Damages for breach by either party may be liquidated in the agreement but only at an amount which is reasonable in the light of the anticipated or actual harm caused by the breach, the difficulties of proof of loss, and the inconvenience or nonfeasibility of otherwise obtaining an adequate remedy. A term fixing unreasonably large liquidated damages is void as a penalty.
+(2) Where the seller justifiably withholds delivery of goods because of the buyer's breach, the buyer is entitled to restitution of any amount by which the sum of his payments exceeds twenty percent of the value of the total performance for which the buyer is obligated under the contract or $500, whichever is smaller.
+
+§ 2-719. CONTRACTUAL MODIFICATION OR LIMITATION OF REMEDY.
+(1) Subject to the provisions of subsections (2) and (3) of this section and of the preceding section on liquidation and limitation of damages,
+(a) the agreement may provide for remedies in addition to or in substitution for those provided in this Article and may limit or alter the measure of damages recoverable under this Article, as by limiting the buyer's remedies to return of the goods and repayment of the price or to repair and replacement of non-conforming goods or parts; and
+(b) resort to a remedy as provided is optional unless the remedy is expressly agreed to be exclusive, in which case it is the sole remedy.
+(2) Where circumstances cause an exclusive or limited remedy to fail of its essential purpose, remedy may be had as provided in this Act.
+(3) Consequential damages may be limited or excluded unless the limitation or exclusion is unconscionable. Limitation of consequential damages for injury to the person in the case of consumer goods is prima facie unconscionable but limitation of damages where the loss is commercial is not.
