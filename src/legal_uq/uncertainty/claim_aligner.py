@@ -81,6 +81,8 @@ class ClaimAlignmentResult:
     matches: List[ClaimEvidenceMatch] = field(default_factory=list)
     unsupported_claim_texts: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    missing_information_detected: bool = False
+    is_answerable: bool = True
 
     @property
     def contradiction_found(self) -> bool:
@@ -225,6 +227,13 @@ class HeuristicClaimAligner:
         """
         has_contradiction, contradiction_details = self._check_inter_candidate_contradictions(candidates)
 
+        # Check if candidate responses explicitly declare that requested information is absent
+        from legal_uq.generation.generator import detect_missing_information
+        is_missing_declared = any(
+            c.metadata.get("missing_information_detected", False) or detect_missing_information(c.answer_text)
+            for c in candidates
+        )
+
         # Extract claims primarily from candidate 0 (primary response), plus others
         all_claims: List[ExtractedClaim] = []
         for c in candidates:
@@ -241,6 +250,39 @@ class HeuristicClaimAligner:
                 contradiction_detected=has_contradiction,
                 contradiction_details=contradiction_details,
                 metadata={"info": "No claims extracted from candidates"},
+                missing_information_detected=is_missing_declared,
+                is_answerable=not is_missing_declared,
+            )
+
+        # Case 0: Candidate explicitly identifies that requested information is missing/absent
+        if is_missing_declared:
+            matches = [
+                ClaimEvidenceMatch(
+                    claim=clm,
+                    verdict=ClaimVerdict.UNSUPPORTED,
+                    matched_chunk_id=evidence[0].chunk_id if evidence else None,
+                    matched_source_locator=evidence[0].source_locator if evidence else None,
+                    overlap_score=0.0,
+                    rationale="Candidate response explicitly indicates that requested legal information is absent from the indexed text.",
+                )
+                for clm in all_claims
+            ]
+            return ClaimAlignmentResult(
+                status="HEURISTIC",
+                total_claims=len(all_claims),
+                supported_claims=0,
+                unsupported_claims=len(all_claims),
+                contradicted_claims=0,
+                support_ratio=0.0,
+                contradiction_detected=has_contradiction,
+                contradiction_details=contradiction_details,
+                matches=matches,
+                unsupported_claim_texts=[
+                    "Requested legal information was not found in the indexed documents."
+                ],
+                metadata={"reason": "MISSING_INFORMATION_DECLARED", "is_answerable": False},
+                missing_information_detected=True,
+                is_answerable=False,
             )
 
         # Case 1: Empty evidence -> all claims are strictly UNSUPPORTED

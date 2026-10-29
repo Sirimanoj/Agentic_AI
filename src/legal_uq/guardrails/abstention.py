@@ -85,6 +85,37 @@ class AbstentionEngine:
                 diagnostics={"confidence": conf, "r_rel": r_rel, "support_ratio": support},
             )
 
+        # Condition 1B: Explicit Missing Information / Requested Fact Absent from Indexed Text
+        if (
+            not getattr(metrics, "is_answerable", True)
+            or getattr(metrics, "missing_information_detected", False)
+            or "REQUESTED_FACT_ABSENT_FROM_EVIDENCE" in metrics.reason_codes
+            or "EXPLICIT_MISSING_INFORMATION_REPORTED" in metrics.reason_codes
+        ):
+            return AbstentionDecision(
+                answer_allowed=False,
+                warning_required=True,
+                decision_level="ABSTAIN",
+                reasons=["REQUESTED_FACT_ABSENT_FROM_EVIDENCE"] + [
+                    r for r in metrics.reason_codes
+                    if r in ("LOW_EVIDENCE_RELEVANCE", "NO_RETRIEVED_EVIDENCE", "EXPLICIT_MISSING_INFORMATION_REPORTED")
+                ],
+                user_explanation=(
+                    "INSUFFICIENT EVIDENCE / FACT ABSENT: The uploaded legal documents do not contain "
+                    "the facts, provisions, or terms required to answer this inquiry. The system has "
+                    "withheld a substantive answer to prevent misinformation or speculation. "
+                    "Review the retrieved document context and explanation below."
+                ),
+                diagnostics={
+                    "confidence": conf,
+                    "r_rel": r_rel,
+                    "support_ratio": support,
+                    "is_answerable": False,
+                    "missing_information_detected": True,
+                    "candidate_consensus": metrics.s_mean,
+                },
+            )
+
         # Condition 2: Tangential evidence (below minimum relevance threshold)
         if r_rel < self.config.min_evidence_relevance:
             reasons.append(

@@ -34,6 +34,9 @@ class UncertaintyMetrics:
     reason_codes: List[str] = field(default_factory=list)
     similarity_matrix: Optional[SimilarityMatrix] = None
     claim_alignment: Optional[ClaimAlignmentResult] = None
+    is_answerable: bool = True  # True if evidence contains facts addressing the query
+    missing_information_detected: bool = False  # True if candidate responses explicitly state info is absent
+    answerability_verdict: str = "ANSWERABLE"  # "ANSWERABLE", "INSUFFICIENT_EVIDENCE", "UNANSWERABLE_ABSENT"
     disclaimer: str = (
         "HEURISTIC METRIC NOTICE: Confidence scores reflect deterministic textual alignment "
         "and multi-candidate agreement heuristics. They do not constitute certified probabilities "
@@ -76,6 +79,7 @@ class UncertaintyAggregator:
         evidence: Sequence[RetrievalResult],
         similarity_matrix: Optional[SimilarityMatrix] = None,
         claim_alignment: Optional[ClaimAlignmentResult] = None,
+        query: Optional[str] = None,
     ) -> UncertaintyMetrics:
         """Compute the final confidence and uncertainty estimates.
 
@@ -89,6 +93,7 @@ class UncertaintyAggregator:
             evidence: Retrieved passages.
             similarity_matrix: Optional precomputed SimilarityMatrix.
             claim_alignment: Optional precomputed ClaimAlignmentResult.
+            query: Optional user question string to verify evidence answerability.
 
         Returns:
             UncertaintyMetrics instance with bounded [0.0, 1.0] scores.
@@ -107,6 +112,9 @@ class UncertaintyAggregator:
                 support_ratio=0.0,
                 contradiction_detected=False,
                 reason_codes=["NO_CANDIDATES_GENERATED"],
+                is_answerable=False,
+                missing_information_detected=True,
+                answerability_verdict="INSUFFICIENT_EVIDENCE",
             )
 
         # 2. Retrieval Relevance Indicator (r_rel)
@@ -181,6 +189,40 @@ class UncertaintyAggregator:
         final_conf = round(max(0.0, min(1.0, float(final_conf))), 4)
         final_uncertainty = round(1.0 - final_conf, 4)
 
+        # 6. Semantic Answerability & Missing Information Check
+        from legal_uq.generation.generator import detect_missing_information, check_evidence_answerability
+
+        missing_info_declared = (
+            getattr(align_res, "missing_information_detected", False)
+            or any(
+                c.metadata.get("missing_information_detected", False) or detect_missing_information(c.answer_text)
+                for c in candidates
+            )
+        )
+
+        query_unanswerable = False
+        if query and evidence:
+            is_ans, _, _ = check_evidence_answerability(query, evidence)
+            if not is_ans:
+                query_unanswerable = True
+
+        is_unanswerable_missing = missing_info_declared or query_unanswerable
+
+        if is_unanswerable_missing:
+            reasons.append("REQUESTED_FACT_ABSENT_FROM_EVIDENCE")
+            if missing_info_declared:
+                reasons.append("EXPLICIT_MISSING_INFORMATION_REPORTED")
+            is_answerable = False
+            missing_information_detected = True
+            answerability_verdict = "INSUFFICIENT_EVIDENCE"
+            support_ratio = 0.0
+            final_conf = 0.0
+            final_uncertainty = 1.0
+        else:
+            is_answerable = True
+            missing_information_detected = False
+            answerability_verdict = "ANSWERABLE"
+
         return UncertaintyMetrics(
             confidence_score=final_conf,
             uncertainty_score=final_uncertainty,
@@ -189,6 +231,9 @@ class UncertaintyAggregator:
             r_rel=round(r_rel, 4),
             support_ratio=round(support_ratio, 4),
             contradiction_detected=contradiction_detected,
+            is_answerable=is_answerable,
+            missing_information_detected=missing_information_detected,
+            answerability_verdict=answerability_verdict,
             reason_codes=reasons,
             similarity_matrix=sim_mat,
             claim_alignment=align_res,
@@ -197,5 +242,8 @@ class UncertaintyAggregator:
                 "raw_formula_value": round(raw_formula, 4),
                 "num_candidates": K,
                 "contradiction_details": align_res.contradiction_details,
+                "candidate_consensus": round(s_mean, 4),
+                "is_answerable": is_answerable,
+                "missing_information_detected": missing_information_detected,
             },
         )

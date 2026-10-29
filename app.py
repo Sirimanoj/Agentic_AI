@@ -535,6 +535,11 @@ if st.session_state.query_result is not None:
 
     # 1. Guardrail Verdict Banner
     dec = res.abstention_decision
+    is_missing_info = (
+        getattr(res.uncertainty_metrics, "missing_information_detected", False)
+        or not getattr(res.uncertainty_metrics, "is_answerable", True)
+    )
+
     if dec.decision_level == "SAFE":
         st.success(
             f"**SAFE (Prototype Risk Assessment — Answer Permitted):** {dec.user_explanation}\n\n"
@@ -547,10 +552,17 @@ if st.session_state.query_result is not None:
             f"*Notice: Discrepancies, partial evidence, or elevated uncertainty were detected. Cross-examine primary source passages.*"
         )
     else:  # ABSTAIN
-        st.error(
-            f"**ABSTAIN (Answer Suppressed by Safety Guardrail):** {dec.user_explanation}\n\n"
-            f"*Notice: The system withheld the generated answer due to critical evidence deficiency or material candidate contradiction.*"
-        )
+        if is_missing_info:
+            st.error(
+                f"**ABSTAIN / INSUFFICIENT EVIDENCE (Substantive Answer Withheld):** {dec.user_explanation}\n\n"
+                f"*Notice: The system verified that the requested legal provision or fact is absent from the indexed documents. "
+                f"Candidate consensus confirms the absence of this information.*"
+            )
+        else:
+            st.error(
+                f"**ABSTAIN (Answer Suppressed by Safety Guardrail):** {dec.user_explanation}\n\n"
+                f"*Notice: The system withheld the generated answer due to critical evidence deficiency or material candidate contradiction.*"
+            )
 
     # 2. Key Metrics Row
     m1, m2, m3, m4 = st.columns(4)
@@ -561,21 +573,39 @@ if st.session_state.query_result is not None:
     support_pct = res.uncertainty_metrics.support_ratio * 100
 
     with m1:
-        st.metric(
-            label="Confidence Score",
-            value=f"{res.confidence_score:.2f}",
-            delta=f"{conf_pct:.0f}% Agreement & Grounding",
-        )
-        st.progress(res.confidence_score)
+        if is_missing_info:
+            st.metric(
+                label="Factual Confidence",
+                value="0.00",
+                delta="0% (Fact Absent from Text)",
+                delta_color="inverse",
+            )
+            st.progress(0.0)
+        else:
+            st.metric(
+                label="Confidence Score",
+                value=f"{res.confidence_score:.2f}",
+                delta=f"{conf_pct:.0f}% Agreement & Grounding",
+            )
+            st.progress(res.confidence_score)
 
     with m2:
-        st.metric(
-            label="Uncertainty Score",
-            value=f"{res.uncertainty_score:.2f}",
-            delta=f"{uncert_pct:.0f}% Estimated Risk",
-            delta_color="inverse",
-        )
-        st.progress(res.uncertainty_score)
+        if is_missing_info:
+            st.metric(
+                label="Uncertainty / Risk",
+                value="1.00",
+                delta="100% Risk (Missing Evidence)",
+                delta_color="inverse",
+            )
+            st.progress(1.0)
+        else:
+            st.metric(
+                label="Uncertainty Score",
+                value=f"{res.uncertainty_score:.2f}",
+                delta=f"{uncert_pct:.0f}% Estimated Risk",
+                delta_color="inverse",
+            )
+            st.progress(res.uncertainty_score)
 
     with m3:
         st.metric(
@@ -586,21 +616,48 @@ if st.session_state.query_result is not None:
         st.progress(max(0.0, min(1.0, top_sim)))
 
     with m4:
-        st.metric(
-            label="Claim Grounding Ratio",
-            value=f"{support_pct:.0f}%",
-            delta=f"{len(res.uncertainty_metrics.claim_alignment.unsupported_claim_texts if res.uncertainty_metrics.claim_alignment else [])} Unsupported",
-        )
-        st.progress(max(0.0, min(1.0, res.uncertainty_metrics.support_ratio)))
+        if is_missing_info:
+            consensus_pct = res.uncertainty_metrics.s_mean * 100
+            st.metric(
+                label="Document Answerability",
+                value="❌ Fact Absent",
+                delta=f"{consensus_pct:.0f}% Consensus on Absence",
+                delta_color="off",
+            )
+            st.progress(0.0)
+        else:
+            unsupported_count = len(
+                res.uncertainty_metrics.claim_alignment.unsupported_claim_texts
+                if res.uncertainty_metrics.claim_alignment else []
+            )
+            st.metric(
+                label="Claim Grounding Ratio",
+                value=f"{support_pct:.0f}%",
+                delta=f"{unsupported_count} Unsupported",
+            )
+            st.progress(max(0.0, min(1.0, res.uncertainty_metrics.support_ratio)))
 
     # 3. Primary Answer Display
     st.markdown("#### 💬 Primary Grounded Response")
     if not res.answer_allowed:
-        st.error(
-            "⚠️ **RESPONSE WITHHELD BY POLICY**: The confidence and grounding thresholds were not met, "
-            "or material contradictions were detected across candidate outputs. "
-            "Please review the underlying evidence passages below directly."
-        )
+        if is_missing_info:
+            st.warning(
+                "⚠️ **FACTUAL ANSWER WITHHELD (INSUFFICIENT EVIDENCE)**: "
+                "The requested legal fact or provision is not contained in the indexed documents. "
+                "Below is the verified missing-information summary explaining what the text contains instead:"
+            )
+            st.info(res.primary_answer.answer_text)
+            if res.primary_answer.cited_sources:
+                citations_html = " ".join(
+                    f'<span class="citation-tag">📌 {cite}</span>' for cite in res.primary_answer.cited_sources
+                )
+                st.markdown(f"**Referenced Excerpts Inspected:** {citations_html}", unsafe_allow_html=True)
+        else:
+            st.error(
+                "⚠️ **RESPONSE WITHHELD BY POLICY**: The confidence and grounding thresholds were not met, "
+                "or material contradictions were detected across candidate outputs. "
+                "Please review the underlying evidence passages below directly."
+            )
     else:
         st.info(res.primary_answer.answer_text)
 

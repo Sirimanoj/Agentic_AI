@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 if "PYTEST_CURRENT_TEST" not in os.environ:
     try:
@@ -92,6 +92,89 @@ def _sanitize_error_message(error: Any, api_key: Optional[str] = None) -> str:
     # Redact Authorization: Bearer tokens
     msg = re.sub(r"Bearer\s+[A-Za-z0-9\-\._~+/]+=*", "Bearer [REDACTED_TOKEN]", msg)
     return msg
+
+
+_QUERY_STOPWORDS = {
+    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", 
+    "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", 
+    "by", "can", "could", "did", "do", "does", "doing", "down", "during", "each", "few", "for", 
+    "from", "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", 
+    "him", "himself", "his", "how", "i", "if", "in", "into", "is", "it", "its", "itself", "me", 
+    "more", "most", "my", "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or", 
+    "other", "ought", "our", "ours", "ourselves", "out", "over", "own", "same", "she", "should", 
+    "so", "some", "such", "than", "that", "the", "their", "theirs", "them", "themselves", "then", 
+    "there", "these", "they", "this", "those", "through", "to", "too", "under", "until", "up", 
+    "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", "whom", "why", 
+    "with", "would", "you", "your", "yours", "yourself", "yourselves", "current", "provide", 
+    "provided", "state", "states", "document", "documents", "tell", "explain", "give", "please",
+}
+
+_MISSING_INFO_REGEX = re.compile(
+    r"\b("
+    r"contains?\s+no\s+information|"
+    r"does\s+not\s+contain\s+(?:any\s+)?information|"
+    r"does\s+not\s+(?:mention|provide|disclose|state|specify|address|reference)|"
+    r"do\s+not\s+(?:contain|mention|provide|disclose|state|specify|address|reference)|"
+    r"(?:there\s+is\s+)?no\s+information\s+(?:regarding|concerning|about|on|is|was|are|found|available|provided|contained|given)|"
+    r"there\s+is\s+no\s+(?:mention|information|reference|record|provision|evidence|detail)|"
+    r"not\s+(?:found|addressed|mentioned|provided|contained)\s+in\s+the\s+(?:provided|retrieved|uploaded|available|indexed)|"
+    r"the\s+(?:provided|retrieved|uploaded|available|indexed)\s+(?:text|passages?|documents?|excerpts?|judgment|contract)\s+(?:does\s+not|do\s+not|contains?\s+no|lacks?)|"
+    r"lacks?\s+(?:sufficient\s+)?(?:information|evidence|details?)\s+to\s+answer|"
+    r"there\s+is\s+no\s+(?:retrieved\s+)?evidence\s+addressing|"
+    r"no\s+relevant\s+(?:clauses?|terms?|provisions?)\s+to\s+substantiate|"
+    r"unable\s+to\s+answer\s+based\s+on\s+the\s+provided|"
+    r"cannot\s+be\s+answered\s+from\s+the\s+provided"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def detect_missing_information(text: str) -> bool:
+    """Return True if response explicitly indicates that requested information is absent from evidence."""
+    if not text or not text.strip():
+        return True
+    return bool(_MISSING_INFO_REGEX.search(text))
+
+
+def check_evidence_answerability(
+    query: str,
+    evidence: Sequence[RetrievalResult],
+) -> Tuple[bool, float, List[str]]:
+    """Determine whether retrieved passages contain sufficient topical vocabulary to answer the query.
+
+    Returns:
+        Tuple of (is_answerable, overlap_ratio, missing_core_terms)
+    """
+    if not evidence or all(not e.text.strip() for e in evidence):
+        return False, 0.0, []
+
+    # Extract non-stopword query tokens (min length 3)
+    q_words = [
+        w.lower()
+        for w in re.findall(r"\b[a-zA-Z]{3,}\b", query)
+        if w.lower() not in _QUERY_STOPWORDS
+    ]
+    if not q_words:
+        top_score = evidence[0].score if evidence else 0.0
+        return top_score >= 0.25, 1.0, []
+
+    # Evidence vocabulary
+    ev_text = " ".join(e.text.lower() for e in evidence if e.text.strip())
+    ev_words = set(re.findall(r"\b[a-zA-Z]{3,}\b", ev_text))
+
+    matched_words = [w for w in q_words if w in ev_words]
+    missing_words = [w for w in q_words if w not in ev_words]
+    overlap_ratio = len(matched_words) / max(1, len(q_words))
+
+    top_score = evidence[0].score if evidence else 0.0
+    # If none of the query content words appear in evidence, or if overlap is minimal with poor relevance:
+    if len(matched_words) == 0:
+        return False, overlap_ratio, missing_words
+
+    if overlap_ratio < 0.25 and top_score < 0.35:
+        return False, overlap_ratio, missing_words
+
+    return True, overlap_ratio, missing_words
 
 
 def _build_system_prompt() -> str:
@@ -239,6 +322,58 @@ class GroundedGenerator:
 
         top_ev = evidence[0]
         cited_locators = [e.source_locator for e in evidence[:2]]
+
+        # Evaluate whether the retrieved passages actually contain vocabulary to answer the query
+        is_answerable, overlap, missing_terms = check_evidence_answerability(query, evidence)
+
+        if not is_answerable:
+            missing_topic = ", ".join(f"'{m}'" for m in missing_terms[:3]) if missing_terms else f"'{query}'"
+            refusal_0 = (
+                f"Based on the indexed document ({top_ev.doc_name}), the retrieved text does not contain "
+                f"information addressing '{query}'. The available excerpts ({top_ev.source_locator} [S1]) "
+                f"pertain to '{top_ev.section_title or top_ev.doc_name}' and lack clauses relating to {missing_topic}. "
+                f"No substantive factual answer can be substantiated from the uploaded text."
+            )
+            refusal_1 = (
+                f"The uploaded document ({top_ev.doc_name}) does not mention or provide details for '{query}'. "
+                f"Retrieved excerpt {top_ev.source_locator} [S1] contains no provisions addressing {missing_topic}."
+            )
+            refusal_2 = (
+                f"A review of {top_ev.source_locator} [S1] indicates that '{query}' is not addressed in this instrument. "
+                f"The indexed legal text pertains to different subject matter and contains no information for {missing_topic}."
+            )
+            refusals = [refusal_0, refusal_1, refusal_2]
+
+            for i in range(num_candidates):
+                r_text = refusals[i % len(refusals)]
+                candidates.append(
+                    CandidateResponse(
+                        candidate_index=i,
+                        generation_mode="MOCK",
+                        answer_text=r_text,
+                        cited_sources=[top_ev.source_locator],
+                        metadata={
+                            "is_answerable": False,
+                            "missing_information_detected": True,
+                            "missing_terms": missing_terms,
+                            "style": f"mock_unanswerable_refusal_{i}",
+                        },
+                    )
+                )
+
+            return GenerationRun(
+                query=query,
+                mode="MOCK",
+                model_name="offline-deterministic-mock",
+                candidates=candidates,
+                disclaimer=f"{LEGAL_DISCLAIMER}\n\n{MOCK_AGREEMENT_WARNING}",
+                metadata={
+                    "is_answerable": False,
+                    "missing_information_detected": True,
+                    "missing_terms": missing_terms,
+                    "total_evidence_passages": len(evidence),
+                },
+            )
 
         # Candidate 0: Direct passage quotation and textual synthesis
         text_preview_0 = top_ev.text.strip().replace("\n", " ")
@@ -424,16 +559,6 @@ class GroundedGenerator:
         client = self._get_or_create_client()
         evidence_context = _build_evidence_context(evidence)
 
-        user_prompt = (
-            f"LEGAL INQUIRY:\n{query}\n\n"
-            f"RETRIEVED DOCUMENT EVIDENCE PASSAGES:\n{evidence_context}\n\n"
-            f"INSTRUCTIONS FOR YOUR RESPONSE:\n"
-            f"- Answer strictly based on the passages above, citing [S1], [S2] etc. where each fact appears.\n"
-            f"- Distinguish direct quotations from your synthesis.\n"
-            f"- If the passages lack sufficient information to answer fully, explicitly identify what is missing.\n"
-            f"- Do not include outside knowledge not contained in the text."
-        )
-
     def _generate_candidate_worker(
         self,
         candidate_idx: int,
@@ -458,6 +583,9 @@ class GroundedGenerator:
         if not found_citations and evidence:
             found_citations.append(evidence[0].source_locator)
 
+        # Detect explicit missing-information declaration by the model
+        is_missing = detect_missing_information(raw_answer)
+
         return CandidateResponse(
             candidate_index=candidate_idx,
             generation_mode="LIVE",
@@ -467,6 +595,8 @@ class GroundedGenerator:
                 "temperature": temperature,
                 "model": self.model_name,
                 "latency_seconds": latency_sec,
+                "missing_information_detected": is_missing,
+                "is_answerable": not is_missing,
             },
         )
 
@@ -537,6 +667,10 @@ class GroundedGenerator:
                     )
                 )
 
+        missing_count = sum(1 for c in candidates if c.metadata.get("missing_information_detected", False))
+        is_run_answerable = (missing_count < len(candidates) / 2)
+        missing_info_detected = (missing_count > 0)
+
         return GenerationRun(
             query=query,
             mode="LIVE",
@@ -547,6 +681,8 @@ class GroundedGenerator:
                 "total_evidence_passages": len(evidence),
                 "temperature": temperature,
                 "concurrency": min(self.max_concurrency, num_candidates),
+                "is_answerable": is_run_answerable,
+                "missing_information_detected": missing_info_detected,
             },
         )
 

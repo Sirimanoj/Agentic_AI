@@ -270,7 +270,7 @@ class LegalUQPipeline:
             )
 
         # 3. Aggregate uncertainty and agreement metrics
-        metrics = self.aggregator.aggregate(candidates, evidence=retrieval_results)
+        metrics = self.aggregator.aggregate(candidates, evidence=retrieval_results, query=question)
 
         # 4. Evaluate guardrails
         decision = engine.evaluate(metrics)
