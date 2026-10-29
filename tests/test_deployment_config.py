@@ -118,3 +118,4 @@ def test_user_upload_does_not_create_disk_files(tmp_path):
     assert not Path("session_upload.txt").exists()
     assert not Path("data/session_upload.txt").exists()
     assert not Path("data/uploads/session_upload.txt").exists()
+
