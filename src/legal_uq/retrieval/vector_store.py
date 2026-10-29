@@ -157,18 +157,33 @@ class CachedSentenceTransformerEmbedder(Embedder):
         from sentence_transformers import SentenceTransformer
 
         snapshot_path = self._find_cached_snapshot_path()
-        try:
-            if snapshot_path:
-                self._model = SentenceTransformer(snapshot_path, local_files_only=True)
-            else:
-                self._model = SentenceTransformer(self.model_name, local_files_only=True)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to load cached embedding model '{self.model_name}'. "
-                f"Ensure the model was pre-downloaded to ~/.cache/huggingface/hub. Details: {exc}"
-            ) from exc
+        last_error = None
 
-        return self._model
+        if snapshot_path:
+            try:
+                self._model = SentenceTransformer(snapshot_path, local_files_only=True)
+                return self._model
+            except Exception as exc:
+                last_error = exc
+
+        # Try local cache lookup first
+        try:
+            self._model = SentenceTransformer(self.model_name, local_files_only=True)
+            return self._model
+        except Exception as exc:
+            last_error = exc
+
+        # Fallback to online download if cache is empty (e.g. fresh Streamlit Community Cloud container)
+        try:
+            self._model = SentenceTransformer(self.model_name)
+            return self._model
+        except Exception as exc:
+            last_error = exc
+
+        raise RuntimeError(
+            f"Failed to load embedding model '{self.model_name}'. "
+            f"Ensure sentence-transformers is installed and the model is reachable or cached. Details: {last_error}"
+        )
 
     def embed_texts(self, texts: Sequence[str]) -> np.ndarray:
         if not texts:

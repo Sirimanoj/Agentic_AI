@@ -1,15 +1,14 @@
-# Core dependencies for Similarity-Based Legal Assistance
-# Verified available in Python 3.13 / Windows environment
-
+# Core dependencies for Legal UQ (Streamlit Community Cloud & Local)
+streamlit>=1.39.0
+pandas>=2.0.0
+numpy>=1.26.0
 pypdf>=5.0.0
 python-docx>=1.1.0
 reportlab>=4.0.0
-sentence-transformers>=3.0.0
 faiss-cpu>=1.8.0
 scikit-learn>=1.4.0
-numpy>=1.26.0
-streamlit>=1.39.0
-pytest>=8.0.0
+sentence-transformers>=3.0.0
 google-genai>=0.1.0
 google-generativeai>=0.8.0
-
+python-dotenv>=1.0.0
+pytest>=8.0.0

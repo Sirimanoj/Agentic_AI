@@ -192,6 +192,22 @@ def _build_system_prompt() -> str:
     )
 
 
+def _get_secret_safe(key: str, default: str = "") -> str:
+    """Safely retrieve configuration value from os.environ or st.secrets without exposing values."""
+    val = os.environ.get(key, "").strip()
+    if val:
+        return val
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and key in st.secrets:
+            s_val = st.secrets[key]
+            if s_val is not None and str(s_val).strip():
+                return str(s_val).strip()
+    except Exception:
+        pass
+    return default
+
+
 class GroundedGenerator:
     """Multi-candidate response generator for legal questions.
 
@@ -213,7 +229,7 @@ class GroundedGenerator:
         """Initialize the generator.
 
         Args:
-            api_key: Optional Gemini API key. If omitted, checks GEMINI_API_KEY or GOOGLE_API_KEY env vars.
+            api_key: Optional Gemini API key. If omitted, checks os.environ and st.secrets.
             model_name: Model identifier. Defaults to GEMINI_MODEL or 'gemini-3.8-flash'.
             client: Optional injected GenAI client instance (useful for unit tests and mocks).
             max_retries: Maximum attempts on transient generation failures.
@@ -223,20 +239,20 @@ class GroundedGenerator:
             request_timeout_seconds: Timeout per candidate request in seconds (default: 90.0 or GEMINI_REQUEST_TIMEOUT).
         """
         self.force_mock = force_mock
-        raw_model = model_name or os.environ.get("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+        raw_model = model_name or _get_secret_safe("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
         self.model_name: str = raw_model.strip()
         self.client: Optional[Any] = None if force_mock else client
         self.max_retries: int = max(0, max_retries)
         self.require_live: bool = bool(require_live and not force_mock)
 
         # Configurable bounded concurrency & timeouts
-        raw_conc = max_concurrency or os.environ.get("GEMINI_MAX_CONCURRENCY", "3")
+        raw_conc = max_concurrency or _get_secret_safe("GEMINI_MAX_CONCURRENCY", "3")
         try:
             self.max_concurrency: int = max(1, int(raw_conc))
         except (ValueError, TypeError):
             self.max_concurrency = 3
 
-        raw_timeout = request_timeout_seconds or os.environ.get("GEMINI_REQUEST_TIMEOUT", "90.0")
+        raw_timeout = request_timeout_seconds or _get_secret_safe("GEMINI_REQUEST_TIMEOUT", "90.0")
         try:
             self.request_timeout_seconds: float = max(5.0, float(raw_timeout))
         except (ValueError, TypeError):
@@ -245,7 +261,11 @@ class GroundedGenerator:
         if force_mock:
             self.api_key = None
         else:
-            resolved_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            resolved_key = (
+                api_key
+                or _get_secret_safe("GEMINI_API_KEY")
+                or _get_secret_safe("GOOGLE_API_KEY")
+            )
             self.api_key = resolved_key.strip() if (resolved_key and resolved_key.strip()) else None
 
     @property

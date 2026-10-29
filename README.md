@@ -233,7 +233,7 @@ Inside the application:
 4. Toggle **⚠️ Simulate Contradiction** to observe automated conflict detection and hard abstention in real time.
 
 ### Running the Full Automated Test Suite
-All 43 unit tests execute completely offline without calling live external APIs:
+All 73 unit and regression tests execute completely offline without calling live external APIs:
 
 ```powershell
 $env:PYTHONPATH="src"
@@ -241,26 +241,71 @@ $env:PYTHONIOENCODING="utf-8"
 python -m pytest tests -v
 ```
 
-### Running the Quantitative Benchmark Suite
-To run the automated benchmark evaluation:
+---
 
-```powershell
-# Fast mode (uses deterministic fake embedder for rapid check):
-$env:PYTHONPATH="src"
-$env:PYTHONIOENCODING="utf-8"
-python scripts/benchmark_eval.py --fast
+## 6. Streamlit Community Cloud Deployment Guide
 
-# Full semantic mode (uses cached all-MiniLM-L6-v2):
-$env:PYTHONPATH="src"
-$env:PYTHONIOENCODING="utf-8"
-python scripts/benchmark_eval.py
-```
+This application is ready for zero-friction deployment to **Streamlit Community Cloud**.
 
-The resulting report is exported to `reports/evaluation_summary.md`.
+### A. Deployment Steps
+
+1. **Push Changes to GitHub**:
+   Ensure all changes are pushed to your remote repository on GitHub:
+   ```bash
+   git add .
+   git commit -m "Prepare application for Streamlit Community Cloud deployment"
+   git push -u origin main
+   ```
+
+2. **Connect Streamlit Community Cloud**:
+   - Navigate to [share.streamlit.io](https://share.streamlit.io/) and sign in with your GitHub account.
+   - Click **"New app"**.
+   - Select your repository: `Sirimanoj/Agentic_AI` (or your repository fork).
+   - Set the branch: `main`.
+   - Set the Main file path: `app.py`.
+   - Select Python Version: `3.11` or `3.12` (recommended for optimal PyTorch and FAISS wheel compatibility).
+
+3. **Configure Secrets in Streamlit Cloud Dashboard**:
+   - Under **Advanced settings** (or in the App Dashboard under **App settings** > **Secrets**), paste your environment secrets in TOML format:
+   ```toml
+   # Gemini API Key (keep private; never commit to Git)
+   GEMINI_API_KEY = "your_actual_gemini_api_key_here"
+
+   # Default model identifier
+   GEMINI_MODEL = "gemini-3.8-flash"
+
+   # Concurrency and timeout bounds
+   GEMINI_MAX_CONCURRENCY = 3
+   GEMINI_REQUEST_TIMEOUT = 90.0
+   ```
+   - Click **Save**. The application will automatically pick up `GEMINI_API_KEY` from `st.secrets` without exposing values.
+
+4. **Launch & Verify**:
+   - Click **Deploy!**. Streamlit Cloud will build the container from `requirements.txt`.
+   - Once deployed, test both **⚡ Offline Demo Mode** (zero API usage) and **🟢 Live Gemini API Mode**.
 
 ---
 
-## 6. Methodological Notices & Ethical Disclosures
+### B. Cloud Resource Limits & Operational Guidance
+
+Streamlit Community Cloud operates under free-tier container boundaries that require the following considerations:
+
+1. **Memory Ceiling (1 GB RAM Limit)**:
+   - Streamlit Community Cloud provides 1 GB of memory per app container.
+   - **Shared Model Caching**: The embedding model weights (`sentence-transformers/all-MiniLM-L6-v2`) are loaded once and cached globally via `@st.cache_resource` (~300–400 MB RAM), preventing out-of-memory errors across multiple user sessions.
+   - **Ephemeral In-Memory Processing**: User document uploads are parsed in-memory and associated with the ephemeral session state (`st.session_state.pipeline`). They are **never stored on disk** and are purged automatically when user sessions close.
+   - **Graceful Fallback**: If memory constraints prevent SentenceTransformers from allocating, the pipeline automatically falls back to `DeterministicFakeEmbedder` to keep the application available.
+
+2. **Document Size Recommendations**:
+   - For optimal responsiveness on free-tier 1 vCPU instances, upload legal documents under **50 pages** or 10 MB per file.
+   - Document upload size limit is capped at 50 MB in `.streamlit/config.toml`.
+
+3. **Concurrent API Requests**:
+   - `GEMINI_MAX_CONCURRENCY` is bounded at 3 workers to prevent rate-limit throttling (HTTP 429) on free/standard Gemini API tiers.
+
+---
+
+## 7. Methodological Notices & Ethical Disclosures
 1. **Informational Prototype**: This software is an engineering and research prototype. It does not provide legal advice or create an attorney-client relationship.
 2. **Traceability**: All answers cite verified document names and page numbers (for PDF) or section/paragraph locators (for DOCX/TXT). The system never fabricates citations or page numbers.
 3. **Consensus Metric**: Confidence reflects textual alignment and multi-candidate agreement heuristics. It does not constitute a certified probability of substantive legal validity under all statutory jurisdictions.

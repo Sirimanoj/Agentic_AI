@@ -4,6 +4,16 @@
 !.env.example
 *.key
 .streamlit/secrets.toml
+!.streamlit/secrets.toml.example
+
+# User document uploads & runtime artifacts
+uploads/
+data/uploads/
+*.pdf
+*.docx
+!data/sample_documents/*.pdf
+!data/sample_documents/*.docx
+!data/sample_documents/*.txt
 
 # Virtual environments
 venv/

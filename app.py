@@ -42,6 +42,7 @@ from legal_uq.pipeline import DocumentSummary, LegalUQPipeline, PipelineQueryRes
 from legal_uq.retrieval.vector_store import (
     CachedSentenceTransformerEmbedder,
     DeterministicFakeEmbedder,
+    Embedder,
 )
 
 # -----------------------------------------------------------------------------
@@ -138,14 +139,49 @@ st.markdown(
 )
 
 
-@st.cache_resource(show_spinner="Initializing embedding model...")
-def get_pipeline() -> LegalUQPipeline:
-    """Cached pipeline initialization."""
+def get_secret(key: str, default: str = "") -> str:
+    """Safely retrieve configuration or credentials from environment or st.secrets.
+
+    Checks os.environ first (local .env or cloud environment variable), then st.secrets
+    (Streamlit Community Cloud configuration). Never prints, logs, or exposes secret values.
+    """
+    val = os.environ.get(key, "").strip()
+    if val:
+        return val
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            s_val = st.secrets[key]
+            if s_val is not None and str(s_val).strip():
+                return str(s_val).strip()
+    except Exception:
+        pass
+    return default
+
+
+@st.cache_resource(show_spinner="Loading embedding model into memory...")
+def get_shared_embedder() -> Embedder:
+    """Cached expensive embedding model initialization.
+
+    Shared across user sessions to prevent duplicate heavy PyTorch model weights in memory.
+    Falls back gracefully to DeterministicFakeEmbedder if model loading or memory fails.
+    """
     try:
         embedder = CachedSentenceTransformerEmbedder()
-    except Exception:
-        embedder = DeterministicFakeEmbedder(dimension=384)
-    return LegalUQPipeline(embedder=embedder)
+        embedder.embed_texts(["Legal UQ initial warm-up"])
+        return embedder
+    except Exception as exc:
+        logging.warning("Falling back to DeterministicFakeEmbedder: %s", exc)
+        return DeterministicFakeEmbedder(dimension=384)
+
+
+def get_pipeline() -> LegalUQPipeline:
+    """Create a pipeline instance backed by the cached shared embedder.
+
+    Each session maintains its own vector store and document registry
+    to prevent document leakage between concurrent cloud users.
+    """
+    shared_embedder = get_shared_embedder()
+    return LegalUQPipeline(embedder=shared_embedder)
 
 
 # Initialize session state
@@ -235,8 +271,8 @@ with st.sidebar:
     )
     is_live_selected = (selected_mode == mode_options[1])
 
-    # Model configuration: respects GEMINI_MODEL env var or defaults to DEFAULT_GEMINI_MODEL (gemini-3.8-flash)
-    env_model = os.environ.get("GEMINI_MODEL", "").strip()
+    # Model configuration: respects GEMINI_MODEL env var or Streamlit Secrets, defaults to DEFAULT_GEMINI_MODEL
+    env_model = get_secret("GEMINI_MODEL", "").strip()
     base_models = list(SUPPORTED_GEMINI_MODELS)
     if env_model:
         model_candidates = [env_model] + [m for m in base_models if m != env_model]
@@ -259,20 +295,20 @@ with st.sidebar:
         model_candidates,
         index=0,
         format_func=_format_model_label,
-        help=f"Supported text models. Default is {DEFAULT_GEMINI_MODEL}. Configurable via $env:GEMINI_MODEL.",
+        help=f"Supported text models. Default is {DEFAULT_GEMINI_MODEL}. Configurable via Secrets or $env:GEMINI_MODEL.",
     )
 
     active_key: Optional[str] = None
     if is_live_selected:
-        env_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if env_key and env_key.strip():
-            st.caption("🔑 API key detected from environment (`$env:GEMINI_API_KEY`).")
+        detected_key = get_secret("GEMINI_API_KEY") or get_secret("GOOGLE_API_KEY")
+        if detected_key:
+            st.caption("🔑 API key detected from environment or Streamlit Secrets.")
             key_override = st.text_input(
                 "Override API Key (Optional):",
                 type="password",
-                help="Leave blank to use the detected environment variable key.",
+                help="Leave blank to use the detected configuration key.",
             )
-            active_key = key_override.strip() if key_override.strip() else env_key.strip()
+            active_key = key_override.strip() if key_override.strip() else detected_key
         else:
             active_key = st.text_input(
                 "Enter Gemini API Key:",
@@ -286,7 +322,10 @@ with st.sidebar:
         else:
             # Preserve Live mode intent without falling back to mock; missing key is flagged clearly
             st.session_state.pipeline.set_api_key(None, model_name=model_choice, force_mock=False)
-            st.sidebar.warning("⚠️ Live Mode selected, but API key is missing. Enter a key above or set $env:GEMINI_API_KEY.")
+            st.sidebar.warning(
+                "⚠️ Live Mode selected, but API key is missing. "
+                "Enter a key above or configure GEMINI_API_KEY in Streamlit Secrets."
+            )
     else:
         # Enforce deterministic mock even if environment variables exist
         st.session_state.pipeline.set_api_key(None, model_name=model_choice, force_mock=True)
