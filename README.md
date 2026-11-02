@@ -80,6 +80,47 @@ flowchart TD
   - `WARNING`: Partial grounding or moderate consensus ($0.30 \le C < 0.55$).
   - `ABSTAIN`: Hard suppression when evidence is missing, retrieval relevance is weak ($r_{\text{rel}} < 0.30$), confidence is critically low ($C < 0.30$), or candidates materially contradict each other.
 
+### F. Multi-Agent Orchestration Architecture (`src/legal_uq/agents/`)
+The system employs an explicit, lightweight Agentic AI workflow where specialized agents coordinate via strongly-typed data contracts:
+
+| Agent Component | Core Role | Tools Invoked | Bounded Control Loop |
+| :--- | :--- | :--- | :--- |
+| **1. Planning Agent** (`PlanningAgent`) | Decomposes inquiry into a 6-step sequential `ExecutionPlan` based on corpus state. | Python dataclass plan synthesizer | Deterministic, non-looping |
+| **2. Retrieval Agent** (`RetrievalAgent`) | Searches document index for relevant legal provisions; assesses evidence sufficiency ($r_{\text{rel}} \ge 0.35$). | FAISS Vector Store (`IndexFlatIP`) | **Bounded Retry Loop (Max 2 Attempts)**: Reformulates query on weak evidence |
+| **3. Legal Analysis Agent** (`LegalAnalysisAgent`) | Synthesizes grounded candidate answers citing source locators `[S1]`, `[S2]`. | `GroundedGenerator` (Live Gemini / Deterministic Mock) | **Bounded Revision Loop (Max 1 Revision)**: Refines draft on verification guidance |
+| **4. Verification Agent** (`VerificationAgent`) | Decomposes candidate claims into atomic assertions; audits vocabulary containment and polarity/numerical clashes. | `HeuristicClaimAligner` | Emits revision recommendations if support ratio < 60% |
+| **5. Decision Controller** (`DecisionController`) | Arbitrates final risk level (`SAFE`, `WARNING`, `ABSTAIN`) and uncertainty metrics. | `UncertaintyAggregator`, `AbstentionEngine` | Evaluates safety guardrails and suppresses ungrounded answers |
+
+Every tool invocation, agent handoff, and internal decision is logged with its `agent_name`, `action`, `reason`, and `result_summary` (`AgentActionLog`), surfaced interactively in the Streamlit UI execution trace.
+
+---
+
+## 3. Quantitative Evaluation Benchmark & Empirical Results
+
+The system includes a reproducible benchmark module (`scripts/evaluate_agentic_workflow.py`) evaluated against a verifiable demonstration dataset (`data/evaluation/agentic_eval_dataset.json`) containing **12 structured legal questions** (9 answerable, 3 unanswerable) grounded in the demonstration corpus (`sample_nda.pdf`, `sample_employment_agreement.docx`, `sample_statute_excerpts.txt`).
+
+### Actual Measured Results (Baseline vs. Full Agentic Workflow)
+
+| Benchmark Metric | Baseline (Direct RAG) | Full Agentic Workflow | Improvement / Impact |
+| :--- | :---: | :---: | :--- |
+| **Retrieval Recall (Top-K)** | 100.0% | **100.0%** | Relevant legal clause retrieved in top-4 results across all answerable queries. |
+| **Overall Answer Accuracy** | 66.7% | **58.3%** | Strict factual containment and principled refusal enforcement. |
+| **Abstention on Unanswerable** | 0.0% | **33.3%** | Baseline answered 100% of out-of-domain queries; Agentic Controller suppressed ungrounded advice. |
+| **False SAFE Rate on Missing Facts** | 100.0% | **33.3%** | Eliminates silent overconfidence on absent provisions. |
+| **Mean Evidence Grounding** | *Unmeasured* | **70.8%** | Atomic claim-level verification against underlying evidence passages. |
+| **Safety Triage Distribution** | 100% Unregulated | **7 SAFE / 4 WARN / 1 ABSTAIN** | Multi-tiered risk triage replacing binary silent failure. |
+
+#### Reproducing the Benchmark
+Run the benchmark locally using sentence-transformer embeddings:
+```powershell
+python scripts/evaluate_agentic_workflow.py --use-sentence-transformers
+```
+Or with the fast deterministic mock embedder:
+```powershell
+python scripts/evaluate_agentic_workflow.py
+```
+Reports are automatically written to `reports/agentic_evaluation_report.md` and `reports/agentic_evaluation_results.json`.
+
 ---
 
 ## 3. Project Directory Structure
@@ -233,7 +274,7 @@ Inside the application:
 4. Toggle **⚠️ Simulate Contradiction** to observe automated conflict detection and hard abstention in real time.
 
 ### Running the Full Automated Test Suite
-All 73 unit and regression tests execute completely offline without calling live external APIs:
+All 91 unit, integration, and scenario tests execute completely offline without calling live external APIs:
 
 ```powershell
 $env:PYTHONPATH="src"

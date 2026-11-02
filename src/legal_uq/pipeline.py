@@ -78,6 +78,14 @@ class PipelineQueryResult:
     def uncertainty_score(self) -> float:
         return self.uncertainty_metrics.uncertainty_score
 
+    @property
+    def agentic_workflow(self) -> Optional[Any]:
+        return self.metadata.get("agentic_workflow")
+
+    @property
+    def execution_trace(self) -> List[Any]:
+        return self.metadata.get("agentic_trace", [])
+
 
 class LegalUQPipeline:
     """High-level facade orchestrating all stages of the legal QA & uncertainty pipeline."""
@@ -192,12 +200,35 @@ class LegalUQPipeline:
             data = f.read()
         return self.ingest_bytes(path.name, data)
 
+    def agentic_query(
+        self,
+        question: str,
+        top_k: int = 4,
+        custom_config: Optional[AbstentionConfig] = None,
+        simulate_contradiction: bool = False,
+    ) -> Any:
+        """Execute the explicit multi-agent orchestration workflow and return full AgenticWorkflowResult."""
+        from legal_uq.agents.agent_workflow import AgentWorkflowOrchestrator
+        orchestrator = AgentWorkflowOrchestrator(
+            vector_store=self.vector_store,
+            generator=self.generator,
+            aggregator=self.aggregator,
+            abstention_engine=self.abstention_engine,
+        )
+        return orchestrator.execute_workflow(
+            question=question,
+            top_k=top_k,
+            custom_config=custom_config,
+            simulate_contradiction=simulate_contradiction,
+        )
+
     def query(
         self,
         question: str,
         top_k: int = 4,
         custom_config: Optional[AbstentionConfig] = None,
         simulate_contradiction: bool = False,
+        use_agentic_workflow: bool = True,
     ) -> PipelineQueryResult:
         """Execute the end-to-end QA, uncertainty evaluation, and guardrail check.
 
@@ -207,10 +238,32 @@ class LegalUQPipeline:
             custom_config: Optional override of the default AbstentionConfig.
             simulate_contradiction: If True, introduces conflicting answers across candidates
                 for testing and interactive demonstration of the contradiction guardrail.
+            use_agentic_workflow: If True, uses the multi-agent orchestration workflow
+                (PlanningAgent, RetrievalAgent with bounded retry, LegalAnalysisAgent,
+                VerificationAgent with bounded revision, and DecisionController).
 
         Returns:
-            Consolidated PipelineQueryResult.
+            Consolidated PipelineQueryResult with agentic_trace in metadata.
         """
+        if use_agentic_workflow:
+            from legal_uq.agents.agent_workflow import (
+                AgentWorkflowOrchestrator,
+                convert_workflow_result_to_pipeline_result,
+            )
+            orchestrator = AgentWorkflowOrchestrator(
+                vector_store=self.vector_store,
+                generator=self.generator,
+                aggregator=self.aggregator,
+                abstention_engine=self.abstention_engine,
+            )
+            wf_res = orchestrator.execute_workflow(
+                question=question,
+                top_k=top_k,
+                custom_config=custom_config,
+                simulate_contradiction=simulate_contradiction,
+            )
+            return convert_workflow_result_to_pipeline_result(wf_res)
+
         t0 = time.perf_counter()
         engine = AbstentionEngine(config=custom_config) if custom_config else self.abstention_engine
 

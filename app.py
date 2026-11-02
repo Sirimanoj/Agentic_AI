@@ -543,6 +543,161 @@ def render_claim_alignment_tab(alignment: Optional[Any]) -> None:
         st.caption("A UI rendering exception occurred while formatting alignment diagnostics. The underlying guardrail assessment was performed independently.")
 
 
+def render_agentic_workflow_tab(res: PipelineQueryResult) -> None:
+    """Render the Multi-Agent Orchestration Plan and Execution Trace."""
+    st.markdown("##### 🧠 Multi-Agent Execution Plan & Decision Trace")
+    st.caption(
+        "Autonomous coordination between PlanningAgent, RetrievalAgent (with bounded query retry), "
+        "LegalAnalysisAgent, VerificationAgent (with bounded revision), and DecisionController."
+    )
+
+    wf = getattr(res, "agentic_workflow", None) or res.metadata.get("agentic_workflow")
+    trace = getattr(res, "execution_trace", None) or res.metadata.get("agentic_trace", [])
+
+    if wf is None and not trace:
+        st.info("No agentic workflow trace recorded for this query.")
+        return
+
+    # 1. High-level agent badges and bounded retry indicators
+    ret_attempts = getattr(wf, "retrieval_attempts", res.metadata.get("retrieval_attempts", 1))
+    ans_revisions = getattr(wf, "answer_revisions", res.metadata.get("answer_revisions", 0))
+
+    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+    with b_col1:
+        st.markdown("**🧠 Planning Agent**")
+        if wf and hasattr(wf, "plan"):
+            st.caption(f"Plan ID: `{wf.plan.plan_id}` ({len(wf.plan.steps)} steps)")
+        else:
+            st.caption("Task Decomposition Active")
+    with b_col2:
+        st.markdown(f"**🔍 Retrieval Agent**")
+        st.caption(f"Attempts: `{ret_attempts} / 2` ({'Refined Query' if ret_attempts > 1 else 'Primary Query'})")
+    with b_col3:
+        st.markdown(f"**⚖️ Legal Analysis Agent**")
+        st.caption(f"Revisions: `{ans_revisions} / 1` ({'Targeted Revision' if ans_revisions > 0 else 'Initial Draft'})")
+    with b_col4:
+        st.markdown(f"**🚦 Decision Controller**")
+        st.caption(f"Guardrail: `{res.decision_level}` (C={res.confidence_score:.2f})")
+
+    st.markdown("---")
+
+    # Compact Executive Trace Panel (Query, Plan, Tools, Evidence, Verification, Confidence, Final Outcome)
+    st.markdown("##### 📌 Compact Agent Execution Trace")
+    try:
+        ev_count = len(getattr(res, "retrieval_results", []))
+    except (TypeError, AttributeError):
+        ev_count = 0
+
+    try:
+        top_score_val = float(res.retrieval_results[0].score)
+        top_score_str = f"{top_score_val:.3f}"
+    except (TypeError, ValueError, AttributeError, IndexError):
+        top_score_str = "0.000"
+
+    try:
+        support_ratio_val = float(getattr(getattr(res, "uncertainty_metrics", None), "support_ratio", 0.0))
+        support_ratio_str = f"{support_ratio_val:.1%}"
+    except (TypeError, ValueError, AttributeError):
+        support_ratio_str = "0.0%"
+
+    contra_flag = bool(getattr(getattr(res, "uncertainty_metrics", None), "contradiction_detected", False))
+
+    try:
+        conf_val = float(res.confidence_score)
+        conf_str = f"{conf_val:.2f}"
+    except (TypeError, ValueError, AttributeError):
+        conf_str = "0.00"
+
+    try:
+        uncert_val = float(res.uncertainty_score)
+        uncert_str = f"{uncert_val:.2f}"
+    except (TypeError, ValueError, AttributeError):
+        uncert_str = "0.00"
+
+    plan_desc = (
+        f"{len(wf.plan.steps)} planned steps ({wf.plan.strategy_rationale[:60]}...)"
+        if (wf and hasattr(wf, "plan") and wf.plan and wf.plan.strategy_rationale)
+        else "Decomposed into 6 sequential multi-agent execution steps"
+    )
+    tools_used = f"FAISS Vector Store ({ret_attempts} attempt{'s' if ret_attempts > 1 else ''}), Grounded Generator ({ans_revisions} revision{'s' if ans_revisions != 0 else ''}), Claim Aligner, Uncertainty Aggregator"
+    explanation = getattr(getattr(res, "abstention_decision", None), "user_explanation", "")
+    outcome_str = (
+        f"✅ Substantive Answer Allowed ({res.decision_level})"
+        if getattr(res, "answer_allowed", True)
+        else f"🛑 Substantive Answer Withheld ({res.decision_level}): {explanation[:80]}..."
+        if explanation
+        else f"🛑 Substantive Answer Withheld ({res.decision_level})"
+    )
+
+    trace_table = (
+        f"| Trace Component | Execution Record |\n"
+        f"| :--- | :--- |\n"
+        f"| **1. User Query** | `{res.question}` |\n"
+        f"| **2. Planning Decision** | {plan_desc} |\n"
+        f"| **3. Tools Invoked** | `{tools_used}` |\n"
+        f"| **4. Retrieved Evidence** | `{ev_count} chunks retrieved` (Top Similarity: `{top_score_str}`) |\n"
+        f"| **5. Analysis & Verification** | Claim Support: `{support_ratio_str}` | Contradictions: `{'Detected ⚠️' if contra_flag else 'None Clean ✅'}` |\n"
+        f"| **6. Confidence Decision** | Confidence: `{conf_str}` | Uncertainty: `{uncert_str}` | Verdict: **{res.decision_level}** |\n"
+        f"| **7. Final Outcome** | **{outcome_str}** |"
+    )
+    st.markdown(trace_table)
+
+    st.markdown("---")
+
+    # 2. Sequential Step-by-Step Execution Plan
+    if wf and hasattr(wf, "plan") and wf.plan.steps:
+        st.markdown("##### 📋 Orchestrator Execution Plan:")
+        step_cols = st.columns(len(wf.plan.steps))
+        for step, col in zip(wf.plan.steps, step_cols):
+            with col:
+                status_icon = (
+                    "✅" if step.status == "COMPLETED"
+                    else "🔄" if step.status == "REVISING"
+                    else "⏭️" if step.status == "SKIPPED"
+                    else "⚠️" if step.status == "FAILED"
+                    else "⏳"
+                )
+                st.markdown(f"**{status_icon} Step {step.step_id}**\n\n*{step.title}*")
+                st.caption(f"**Agent:** `{step.assigned_agent}`\n\n{step.status_notes}")
+
+        if wf.plan.strategy_rationale:
+            st.info(f"💡 **Planning Strategy:** {wf.plan.strategy_rationale}")
+
+    st.markdown("---")
+
+    # 3. Inter-Agent Action & Decision Log Table
+    st.markdown("##### 📝 Inter-Agent Audit Log (Action, Reason, Result):")
+    if trace:
+        log_rows = []
+        for i, item in enumerate(trace, start=1):
+            ts = getattr(item, "timestamp", "")
+            agent = getattr(item, "agent_name", "")
+            action = getattr(item, "action", "")
+            reason = getattr(item, "reason", "")
+            summary = getattr(item, "result_summary", "")
+            log_rows.append({
+                "Seq": i,
+                "Agent": agent,
+                "Action": action,
+                "Reason / Motivation": reason,
+                "Result / Outcome": summary,
+            })
+        st.dataframe(pd.DataFrame(log_rows), use_container_width=True, hide_index=True)
+
+        with st.expander("🔍 Inspect Full Structured Trace Details (JSON)"):
+            json_logs = []
+            for item in trace:
+                json_logs.append({
+                    "timestamp": getattr(item, "timestamp", ""),
+                    "agent": getattr(item, "agent_name", ""),
+                    "action": getattr(item, "action", ""),
+                    "reason": getattr(item, "reason", ""),
+                    "result_summary": getattr(item, "result_summary", ""),
+                    "details": getattr(item, "details", {}),
+                })
+            st.json(json_logs)
+
+
 # -----------------------------------------------------------------------------
 # Results Presentation
 # -----------------------------------------------------------------------------
@@ -707,13 +862,18 @@ if st.session_state.query_result is not None:
             )
             st.markdown(f"**Referenced Document Citations:** {citations_html}", unsafe_allow_html=True)
 
-    # 4. Diagnostic Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # 4. Diagnostic Tabs (featuring Multi-Agent Trace)
+    tab0, tab1, tab2, tab3, tab4 = st.tabs([
+        "🧠 Agentic AI Workflow & Audit Trace",
         "🤖 Candidate Agreement (3 Candidates)",
         "📊 Similarity & Agreement Matrices",
         "⚖️ Claim-Level Alignment & Contradictions",
         "📄 Retrieved Evidence Passages",
     ])
+
+    # Tab 0: Agentic AI Workflow & Trace
+    with tab0:
+        render_agentic_workflow_tab(res)
 
     # Tab 1: Candidates
     with tab1:

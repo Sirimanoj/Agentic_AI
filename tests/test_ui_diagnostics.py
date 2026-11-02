@@ -3,7 +3,14 @@
 from unittest.mock import MagicMock, patch
 import pytest
 
-from app import render_claim_alignment_tab
+from app import render_agentic_workflow_tab, render_claim_alignment_tab
+from legal_uq.agents.models import (
+    AgentActionLog,
+    AgenticWorkflowResult,
+    ExecutionPlan,
+    PlanStep,
+    StepStatus,
+)
 from legal_uq.uncertainty.claim_aligner import (
     ClaimAlignmentResult,
     ClaimEvidenceMatch,
@@ -221,4 +228,69 @@ def test_render_claim_alignment_tab_catches_unexpected_exception_and_presents_cl
     assert "Diagnostic Rendering Notice" in err_text
     assert "RuntimeError" in err_text
     mock_cap.assert_called_once()
+
+
+@patch("streamlit.caption")
+@patch("streamlit.info")
+@patch("streamlit.warning")
+@patch("streamlit.success")
+@patch("streamlit.error")
+@patch("streamlit.markdown")
+@patch("streamlit.dataframe")
+def test_render_agentic_workflow_tab_active_trace(
+    mock_df: MagicMock,
+    mock_md: MagicMock,
+    mock_err: MagicMock,
+    mock_succ: MagicMock,
+    mock_warn: MagicMock,
+    mock_info: MagicMock,
+    mock_cap: MagicMock,
+):
+    """Verify render_agentic_workflow_tab displays execution plan, agent badges, and action table."""
+    plan = ExecutionPlan(
+        plan_id="plan_test123",
+        question="What is the notice period?",
+        steps=[
+            PlanStep(1, "Evidence Retrieval", "RetrievalAgent", "Search vector store", StepStatus.COMPLETED),
+            PlanStep(2, "Sufficiency Assessment", "RetrievalAgent", "Check relevance", StepStatus.COMPLETED),
+        ],
+        strategy_rationale="Active test strategy",
+    )
+    trace = [
+        AgentActionLog(agent_name="PlanningAgent", action="PLAN_SYNTHESIS", reason="Plan inquiry", result_summary="Done"),
+        AgentActionLog(agent_name="RetrievalAgent", action="RETRIEVAL_PRIMARY", reason="Search index", result_summary="Found 1"),
+    ]
+    wf = AgenticWorkflowResult(
+        question="What is the notice period?",
+        plan=plan,
+        execution_trace=trace,
+        retrieval_attempts=1,
+        answer_revisions=0,
+    )
+    mock_res = MagicMock()
+    mock_res.agentic_workflow = wf
+    mock_res.execution_trace = trace
+    mock_res.decision_level = "SAFE"
+    mock_res.confidence_score = 0.88
+    mock_res.metadata = {"agentic_workflow": wf, "agentic_trace": trace}
+
+    render_agentic_workflow_tab(mock_res)
+
+    # Must render dataframe for action log
+    mock_df.assert_called_once()
+    mock_err.assert_not_called()
+
+
+@patch("streamlit.info")
+@patch("streamlit.markdown")
+def test_render_agentic_workflow_tab_empty_trace(mock_md: MagicMock, mock_info: MagicMock):
+    """Verify render_agentic_workflow_tab handles missing trace gracefully."""
+    mock_res = MagicMock()
+    mock_res.agentic_workflow = None
+    mock_res.execution_trace = []
+    mock_res.metadata = {}
+
+    render_agentic_workflow_tab(mock_res)
+    mock_info.assert_called_once()
+    assert "No agentic workflow trace" in mock_info.call_args[0][0]
 

@@ -1,0 +1,135 @@
+[
+  {
+    "id": "EVAL-01",
+    "question": "What is the duration of the confidentiality obligations following termination of the NDA?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["3 years", "three", "survive", "termination"],
+    "supporting_document": "sample_nda.pdf",
+    "supporting_section": "Section 4: Term and Survival of Confidentiality",
+    "evidence_excerpt": "the confidentiality obligations with respect to all disclosed Confidential Information shall survive for a period of three (3) years following the effective date of termination. Trade secrets shall be maintained in confidence in perpetuity.",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-02",
+    "question": "Within how many calendar days must the Receiving Party return or destroy confidential materials after written demand?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["14", "fourteen", "calendar days", "return", "destroy"],
+    "supporting_document": "sample_nda.pdf",
+    "supporting_section": "Section 5: Return and Certification of Destruction",
+    "evidence_excerpt": "Within fourteen (14) calendar days following Disclosing Party's written demand, Receiving Party shall promptly return or securely destroy all tangible materials, digital documents, summaries, and notes containing or reflecting Confidential Information",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-03",
+    "question": "Which court has exclusive jurisdiction over disputes arising from the NDA?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["Court of Chancery", "Delaware"],
+    "supporting_document": "sample_nda.pdf",
+    "supporting_section": "Section 6: Governing Law and Forum",
+    "evidence_excerpt": "The parties irrevocably submit to the exclusive jurisdiction of the Court of Chancery of the State of Delaware.",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-04",
+    "question": "Within how many business days must the Receiving Party provide advance written notice if legally compelled to disclose confidential information?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["5 business days", "advance written notice", "protective order"],
+    "supporting_document": "sample_nda.pdf",
+    "supporting_section": "Section 3: Permitted Disclosures and Legal Compulsion",
+    "evidence_excerpt": "Provided, however, that Receiving Party shall provide prompt advance written notice within 5 business days to Disclosing Party to enable Disclosing Party to seek a protective order or confidential treatment.",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-05",
+    "question": "What is the annualized base salary for the Chief Technology Officer under the employment contract?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["$250,000", "250,000", "base salary"],
+    "supporting_document": "sample_employment_agreement.docx",
+    "supporting_section": "Section 3: Compensation and Benefits",
+    "evidence_excerpt": "Executive shall receive an annualized base salary of $250,000, payable in semi-monthly installments in accordance with the Company's standard payroll practices.",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-06",
+    "question": "What is the required notice period for termination without cause in the employment agreement?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["60", "sixty", "calendar days", "written notice"],
+    "supporting_document": "sample_employment_agreement.docx",
+    "supporting_section": "Section 5: Termination of Employment",
+    "evidence_excerpt": "Either party may terminate this Agreement without Cause upon sixty (60) calendar days prior written notice to the other party.",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-07",
+    "question": "What is the duration of the post-employment non-competition covenant?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["12 months", "twelve", "non-competition", "termination"],
+    "supporting_document": "sample_employment_agreement.docx",
+    "supporting_section": "Section 7: Restrictive Covenants",
+    "evidence_excerpt": "For a period of twelve (12) months following the termination of Executive's employment for any reason, Executive shall not engage in, perform services for, or invest in any competing business enterprise.",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-08",
+    "question": "What is the dollar price threshold for the statute of frauds to apply to contracts for the sale of goods under UCC Section 2-201?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["$500", "500", "sale of goods", "enforceable"],
+    "supporting_document": "sample_statute_excerpts.txt",
+    "supporting_section": "§ 2-201. Formal Requirements; Statute of Frauds",
+    "evidence_excerpt": "Except as otherwise provided in this section a contract for the sale of goods for the price of $500 or more is not enforceable by way of action or defense unless there is some writing sufficient to indicate that a contract for sale has been made",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-09",
+    "question": "Under UCC Section 2-718, what is the legal effect of a contract clause fixing unreasonably large liquidated damages?",
+    "expected_answerability": "answerable",
+    "expected_key_facts": ["void as a penalty", "void", "penalty"],
+    "supporting_document": "sample_statute_excerpts.txt",
+    "supporting_section": "§ 2-718. Liquidation or Limitation of Damages",
+    "evidence_excerpt": "Damages for breach by either party may be liquidated in the agreement but only at an amount which is reasonable in the light of the anticipated or actual harm... A term fixing unreasonably large liquidated damages is void as a penalty.",
+    "unanswerable_rationale": null,
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-10",
+    "question": "What are the criminal penalties and prison sentences for violating the mutual confidentiality agreement?",
+    "expected_answerability": "unanswerable",
+    "expected_key_facts": ["absent", "no criminal penalties", "not addressed", "unanswerable"],
+    "supporting_document": null,
+    "supporting_section": null,
+    "evidence_excerpt": null,
+    "unanswerable_rationale": "The NDA is a private civil contract governed by Delaware civil contract law. Criminal penalties and imprisonment terms are completely absent from the indexed documents.",
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-11",
+    "question": "What is the official USPTO patent registration filing fee for small entities?",
+    "expected_answerability": "unanswerable",
+    "expected_key_facts": ["absent", "not mentioned", "not found", "unanswerable"],
+    "supporting_document": null,
+    "supporting_section": null,
+    "evidence_excerpt": null,
+    "unanswerable_rationale": "Federal patent fee schedules under 37 CFR are external administrative figures not contained within the indexed corporate contract corpus.",
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  },
+  {
+    "id": "EVAL-12",
+    "question": "What is the maximum legal statutory loan interest rate cap under Delaware banking code?",
+    "expected_answerability": "unanswerable",
+    "expected_key_facts": ["absent", "not found", "unanswerable", "no information"],
+    "supporting_document": null,
+    "supporting_section": null,
+    "evidence_excerpt": null,
+    "unanswerable_rationale": "Delaware Title 5 banking code statutory interest rates and usury limits are absent from the indexed agreement corpus.",
+    "disclaimer": "Demonstration benchmark item. Not legal advice."
+  }
+]
+
